@@ -8,5 +8,6 @@ load_dotenv(find_dotenv())
 APP_ID = os.getenv("APP_ID")
 APP_SECRET = os.getenv("APP_SECRET")
 LARK_HOST = os.getenv("LARK_HOST")
+BACKUP_PATH = os.getenv("BACKUP_PATH")
 
 
