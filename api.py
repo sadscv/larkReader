@@ -145,13 +145,16 @@ class Client(object):
         resp = request("GET", url, headers)
         return resp['data']
 
-    def get_document_blocks(self, access_token, document_id):
-        url = self._host + "/open-apis/docx/v1/documents/" + document_id + "/blocks"
+    def get_document_blocks(self, access_token, document_id, page_token=None):
+        if page_token:
+            url = self._host + "/open-apis/docx/v1/documents/" + document_id + "/blocks" + "?page_token={}".format(page_token)
+        else:
+            url = self._host + "/open-apis/docx/v1/documents/" + document_id + "/blocks"
         headers = {
             'Authorization': 'Bearer ' + access_token
         }
         resp = request("GET", url, headers)
-        return resp['data']['items']
+        return resp['data']
 
     def create_document_block(self, access_token, document_id, root_block_id, index, children):
         url = self._host + "/open-apis/docx/v1/documents/" + document_id + "/blocks/" + root_block_id + "/children"
@@ -164,7 +167,6 @@ class Client(object):
             "children": children,
         }
         resp = request("POST", url, headers, payload)
-        print(resp)
         return resp
 
     def update_block_link_url(self, access_token, document_id, block_id, elements, revision_id=-1):
