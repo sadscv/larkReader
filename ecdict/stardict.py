@@ -1334,7 +1334,7 @@ class DictHelper(object):
                 if 'n' not in opts:
                     dictionary.update(word, update, False)
             else:
-                dictionary.register(word, update, False)
+                dictionary.register_para(word, update, False)
             count += 1
         dictionary.commit()
         print('imported %d entries' % count)
@@ -1535,7 +1535,7 @@ class DictHelper(object):
         if data is None:
             if not create:
                 return False
-            dictionary.register(word, {}, False)
+            dictionary.register_para(word, {}, False)
             data = {}
         detail = data.get('detail')
         if not detail:
@@ -1672,7 +1672,7 @@ class DictHelper(object):
         for word in words:
             data = dictionary.query(word)
             if not data:
-                dictionary.register(word, {'translation': words[word]}, False)
+                dictionary.register_para(word, {'translation': words[word]}, False)
             else:
                 dictionary.update(word, {'translation': words[word]}, False)
             pc.inc(0)

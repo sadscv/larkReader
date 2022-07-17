@@ -1,13 +1,15 @@
 # -*- coding: UTF-8 -*-
+import json
 import logging
+import re
 import time
 from datetime import datetime
 from threading import Timer
-from typing import List
 
 import api
 import config
 from ecdict.stardict import LemmaDB, StarDict, convert_dict
+from paragraphDict import ParagraphDict
 
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(format=LOG_FORMAT, level=logging.ERROR)
@@ -19,12 +21,13 @@ logging.info(os.getcwd())
 
 
 class LarkReader:
-    def __init__(self, document_id):
+    def __init__(self, document_id, lookup_doc_id):
         self.document_id = document_id
+        self.lookup_doc_id = lookup_doc_id
         self.client = api.Client(config.LARK_HOST)
         self.lemma = LemmaDB()
         self.lemma.load('./ecdict/lemma.en.txt')
-        self.dict = self.load_dict()
+        self.dict, self.para_dict = self.load_dict()
         self.base_time = datetime.now()
 
         self.tenant_access_token = None
@@ -34,17 +37,26 @@ class LarkReader:
         self.recent_revision_id = None
         self.item_children = []
         self.root_block_id = None
+        self.lookup_root_block_id = self.lookup_doc_root_block()
         self.pending_update_blocks = {}
 
     def fetch_tenant_access_token(self):
         self.tenant_access_token = self.client.get_tenant_access_token(config.APP_ID, config.APP_SECRET)
+        # 每隔一个半小时获取一次token
         Timer(5400, self.fetch_tenant_access_token).start()
+
+    def lookup_doc_root_block(self):
+        if self.lookup_doc_id:
+            blocks_data = self.client.get_document_blocks(self.tenant_access_token, self.lookup_doc_id)
+            root_block_id = blocks_data['items'][0]['block_id']
+            return root_block_id
+        return None
 
     def load_dict(self):
         db = os.path.join(os.path.dirname(__file__), 'test.db')
         if len(StarDict(db)) < 10:
             convert_dict(db, './ecdict/ecdict.csv')
-        return StarDict(db)
+        return StarDict(db), ParagraphDict(db)
 
     def reload_blocks(self):
         self.pending_update_blocks = {}
@@ -189,9 +201,37 @@ class LarkReader:
                 lemma_text = self.get_lemma_text(textrun['text_run']['content'].split())
             else:
                 lemma_text = textrun['text_run']['content'].split()
+
             translation = self.get_translated_result(lemma_text)
-            payload = [
-                {
+
+            payload = {
+                "block_type": 2,
+                "text": {
+                    "elements": [
+                        {
+                            "text_run": {
+                                "content": lemma_text,
+                                "text_element_style": {
+                                    "bold": True,
+                                }
+                            }
+                        },
+                        {
+                            "text_run": {
+                                "content": ': ' + translation,
+                                "text_element_style": {
+                                    # "text_color": 5
+                                }
+                            }
+                        },
+                    ],
+                    "style": {}
+                }
+            }
+
+            familiar_word = self.is_familiar_word(lemma_text)
+            if familiar_word:
+                payload = {
                     "block_type": 2,
                     "text": {
                         "elements": [
@@ -205,9 +245,18 @@ class LarkReader:
                             },
                             {
                                 "text_run": {
+                                    "content": '【外刊常查】',
+                                    "text_element_style": {
+                                        "link": {
+                                            'url': 'https%3A%2F%2Fjqsqpfsx8w.feishu.cn%2Fdocx%2Fdoxcn0WtPgwioy4ATaSZGq9h6Vc',
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "text_run": {
                                     "content": ': ' + translation,
                                     "text_element_style": {
-                                        # "text_color": 5
                                     }
                                 }
                             },
@@ -215,14 +264,68 @@ class LarkReader:
                         "style": {}
                     }
                 }
-            ]
-
             self.client.create_document_block(
-                self.tenant_access_token, self.document_id, self.root_block_id, index, payload)
+                self.tenant_access_token, self.document_id, self.root_block_id, index, [payload])
+            lookup_payload = []
+            word_head_payload = []
+
+            if familiar_word:
+                for para in familiar_word:
+                    word_raw, count, para_raw, day, title  = para
+                    para_payload = [
+                        {
+                            "block_type": 5,
+                            "heading3": {
+                                "elements": [
+                                    {
+                                        "text_run": {
+                                            "content": day + ' ' + title,
+                                            "text_element_style": {
+                                                "link": {
+                                                    'url': 'https%3A%2F%2Fsadscv.gitbook.io%2Fjournalreading%2Farticles%2F' + day.lower().strip(),
+                                                }
+                                            }
+                                        }
+                                    }
+                                ],
+                                "style": {}
+                            }
+                        },
+                    ]
+                    para_payload += json.loads(para_raw)
+                    lookup_payload += para_payload
+                    word_head_payload = [
+                        {
+                            "block_type": 3,
+                            "heading1": {
+                                "elements": [
+                                    {
+                                        "text_run": {
+                                            "content": "{}: 共{}篇".format(word_raw, count),
+                                            "text_element_style": {
+                                                "bold": True,
+                                            }
+                                        }
+                                    }
+                                ],
+                                "style": {}
+                            }
+                        },
+                        {
+                            "block_type": 22,
+                            "divider": {
+
+                            }
+                        }
+                    ]
+                # 常查词文档更新
+                self.client.create_document_block(self.tenant_access_token, self.lookup_doc_id, self.lookup_root_block_id,
+                                                  1, word_head_payload + lookup_payload)
         self.reload_blocks()
         print('insert translations spent:', datetime.now() - self.base_time)
 
     def get_translated_result(self, source_text, source_language='en', target_language='zh'):
+
         local_translation = self.retrieve_local_translation(source_text)
         if local_translation:
             if 'cet6' in local_translation['tag']:
@@ -247,19 +350,34 @@ class LarkReader:
         else:
             return False
 
+    def is_familiar_word(self, source_text):
+        result = self.para_dict.query_word(source_text)
+        if result:
+            count = 0
+            for para in result:
+                word_raw, count, para_raw, day, title = para
+            if count >= 2:
+                return result
+        else:
+            return False
+
 
 if __name__ == "__main__":
     document_id = 'doxcnU011496YFc2dXIMYSsdWAd'
-    reader = LarkReader(document_id)
+    lookup_doc_id = 'doxcn0WtPgwioy4ATaSZGq9h6Vc'
+    reader = LarkReader(document_id, lookup_doc_id)
     while True:
-        new_article = reader.parse_document_retrive_new_article()
-        if not reader.latest_article:
-            reader.latest_article = new_article
-        if new_article:
-            updated_elements = reader.get_updated_textrun_elements(new_article)
-            for e in updated_elements:
-                reader.process_patch_blocks(e['block_id'], e['text'])
-            reader.update_modified_blocks()
-            reader.insert_quote_block(new_article, updated_elements)
+        try:
+            new_article = reader.parse_document_retrive_new_article()
+            if not reader.latest_article:
+                reader.latest_article = new_article
+            if new_article:
+                updated_elements = reader.get_updated_textrun_elements(new_article)
+                for e in updated_elements:
+                    reader.process_patch_blocks(e['block_id'], e['text'])
+                reader.update_modified_blocks()
+                reader.insert_quote_block(new_article, updated_elements)
 
-        # time.sleep(0.6)
+            time.sleep(0.6)
+        except ConnectionError:
+            pass
