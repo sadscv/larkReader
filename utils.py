@@ -19,13 +19,12 @@ def request(method, url, headers, payload={}, files=-1):
     else:
         response = requests.request(method, url, headers=headers, json=payload)
     logging.info("URL: " + url)
-    logging.info("X-Tt-Logid: " + response.headers['X-Tt-Logid'])
     logging.info("headers:\n"+json.dumps(headers,indent=2, ensure_ascii=False))
     logging.info("payload:\n"+json.dumps(payload,indent=2, ensure_ascii=False))
     resp = {}
     if response.text[0] == '{':
         resp = response.json()
-        logging.info("response:\n"+json.dumps(resp,indent=2, ensure_ascii=False))
+        # logging.info("response:\n"+json.dumps(resp,indent=2, ensure_ascii=False))
     else:
         logging.info("response:\n"+response.text)
     code = resp.get("code", -1)

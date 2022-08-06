@@ -265,7 +265,7 @@ class DocParser(LarkReader):
         for ele in elements:
             if 'text_run' in ele:
                 raw_text += ele['text_run']['content']
-        if raw_text == '':
+        if raw_text == '' or raw_text == ' ':
             return False
         else:
             return raw_text
@@ -276,7 +276,12 @@ class DocParser(LarkReader):
 
     @staticmethod
     def parse_heading_text(heading1):
-        day = heading1.split()[0].strip()
+        if heading1.startswith('DAY'):
+            print(heading1[3:].split())
+            day = 'DAY' + heading1[3:].split()[0]
+        else:
+            print('fuck', heading1)
+            day = heading1.split()[0].strip()
         title = heading1[len(day):].strip()
         if day.lower().startswith(('d', 'day')):
             return day, title
@@ -294,7 +299,8 @@ class DocParser(LarkReader):
             if 'text_run' in ele:
                 ele_style = ele['text_run']['text_element_style']
                 # 标红或加粗
-                if ('text_color' in ele_style and ele_style['text_color'] == 1) or ele_style['bold']:
+                if ('background_color' in ele_style and ele_style['background_color'] == 3) or ele_style['bold']:
+                # if ('text_color' in ele_style and ele_style['text_color'] == 1) or ele_style['bold']:
                     # 空格直接处理
                     if ele['text_run']['content'] == ' ':
                         raw_text += ele['text_run']['content']
@@ -404,8 +410,14 @@ class DocParser(LarkReader):
 
 
 if __name__ == '__main__':
+    # 在读飞书文档
     # document_ids = ['doxcnU011496YFc2dXIMYSsdWAd']
-    document_ids = ['doxcnU011496YFc2dXIMYSsdWAd', 'doxcnCTsMwN5JqEWxqMDppxdkvb']
+    # 旧飞书文档
+    # document_ids = ['doxcnU011496YFc2dXIMYSsdWAd', 'doxcnCTsMwN5JqEWxqMDppxdkvb', 'doxcnmTq7TlPwPu6Tlf21EmKApg']
+    # 点点转来文档
+    document_ids = ['doxcnovMp4GrSEeYeRzRYnRCamD', 'doxcncQyJIUONuBmQoohhbGlNgb', 'doxcn7HJl5sJ6dZtz0rtmVptupg']
+    # 原石墨文档内容
+    # document_ids = ['doxcnJ8U5wGkH3XhZysvdrTOXYb', 'doxcnKncOfftlkTlKzA4irnE1Dg', 'doxcnOc2dBv1X7RGqQ13zqvYIAg']
     parser = DocParser(document_ids[0])
     article_list = []
     for document_id in document_ids:

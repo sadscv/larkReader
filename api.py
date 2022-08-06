@@ -146,6 +146,7 @@ class Client(object):
         return resp['data']
 
     def get_document_blocks(self, access_token, document_id, page_token=None):
+        print(access_token, document_id)
         if page_token:
             url = self._host + "/open-apis/docx/v1/documents/" + document_id + "/blocks" + "?page_token={}".format(page_token)
         else:
@@ -166,6 +167,7 @@ class Client(object):
             "index": index,
             "children": children,
         }
+        print(payload)
         resp = request("POST", url, headers, payload)
         return resp
 

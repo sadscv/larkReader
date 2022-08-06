@@ -10,6 +10,8 @@
 #
 # ======================================================================
 from __future__ import print_function
+
+import logging
 import sys
 import time
 import os
@@ -132,6 +134,7 @@ class StarDict(object):
 
     # 查询单词
     def query(self, key):
+        print('query', key)
         c = self.__conn.cursor()
         record = None
         if isinstance(key, int) or isinstance(key, long):
@@ -149,6 +152,7 @@ class StarDict(object):
         if not strip:
             sql = 'select id, word from stardict where word >= ? '
             sql += 'order by word collate nocase limit ?;'
+            logging.info("word lookup without lemma: {}, {}, {}".format(sql, word, limit))
             c.execute(sql, (word, limit))
         else:
             sql = 'select id, word from stardict where sw >= ? '
